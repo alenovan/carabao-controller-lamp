@@ -5,16 +5,13 @@ const crypto = require('crypto');
 const app = express();
 const port = 3000;
 const jwt = require('jsonwebtoken');
+const config = require('./config')
 // Middleware
 app.use(bodyParser.json());
 
 // Konfigurasi Database MySQL
-const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'carabao_controller'
-});
+// Konfigurasi Database MySQL
+const db = mysql.createConnection(config);
 
 db.connect(err => {
     if (err) {
