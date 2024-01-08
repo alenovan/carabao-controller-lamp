@@ -98,7 +98,7 @@ app.post('/configs', verifyToken, (req, res) => {
             });
         } else {
             // The record does not exist, insert it
-            const insertQuery = 'INSERT INTO configs (id, ip,secret) VALUES (?, ?)';
+            const insertQuery = 'INSERT INTO configs (id, ip,secret) VALUES (?, ?,?)';
 
             db.query(insertQuery, [configIdToUpdate, ip, secret], (insertErr, insertResults) => {
                 if (insertErr) {
