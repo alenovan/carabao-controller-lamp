@@ -236,6 +236,7 @@ app.get('/newest-orders', verifyToken, (req, res) => {
     const query = `
     SELECT
 	rooms.id AS room_id,
+	rooms.code,
 	rooms.name,
 	rooms.status status_rooms,
 	orders.status status_order,
