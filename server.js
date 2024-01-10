@@ -25,7 +25,7 @@ db.connect(err => {
 // Middleware to verify JWT token
 function verifyToken(req, res, next) {
     const authHeader = req.header('Authorization');
-    const token = authHeader && authHeader.split(' ')[1]; // Extract the token from the Authorization header
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) return res.status(403).json({ success: false, message: 'Access denied' });
 
@@ -48,9 +48,13 @@ app.post('/logins', (req, res) => {
             console.error('Error querying user:', err);
             res.status(500).json({ success: false, message: 'Error querying user' });
         } else if (results.length > 0) {
-            // User authenticated, generate a JWT token
-            const token = jwt.sign({ username: username }, 'your-secret-key'); // Replace 'your-secret-key' with a secure secret key
+            const userId = results[0].id; // Assuming your user table has an 'id' field
+
+            // User authenticated, generate a JWT token with user ID in the payload
+            const token = jwt.sign({ id_user: userId, username: username }, 'your-secret-key'); // Replace 'your-secret-key' with a secure secret key
+
             res.json({ success: true, message: 'Login berhasil', token: token });
+
         } else {
             res.status(401).json({ success: false, message: 'Login gagal' });
         }
@@ -127,9 +131,78 @@ app.get('/configs', verifyToken, (req, res) => {
 });
 
 
-app.post('/orders', verifyToken, (req, res) => {
-    const { id_rooms, id_users, start_time, end_time, status } = req.body;
+app.post('/orders-open-billing', verifyToken, (req, res) => {
+    const { id_rooms, duration } = req.body;
+    const type = "OPEN-BILLING";
+    const status = "START";
+    const id_users = req.user.id_user;
+    // // Check if id_rooms exists in the rooms table
+    const checkRoomsQuery = 'SELECT * FROM rooms WHERE id = ?';
+    db.query(checkRoomsQuery, [id_rooms], (roomsErr, roomsResults) => {
+        if (roomsErr) {
+            console.error('Error checking rooms:', roomsErr);
+            res.status(500).json({ success: false, message: 'Error checking rooms' });
+            return;
+        }
 
+        if (roomsResults.length === 0) {
+            res.status(400).json({ success: false, message: 'Invalid id_rooms' });
+            return;
+        }
+
+        // Check if id_users exists in the users table
+        const checkUsersQuery = 'SELECT * FROM users WHERE id = ?';
+        db.query(checkUsersQuery, [id_users], (usersErr, usersResults) => {
+            if (usersErr) {
+                console.error('Error checking users:', usersErr);
+                res.status(500).json({ success: false, message: 'Error checking users' });
+                return;
+            }
+
+            if (usersResults.length === 0) {
+                res.status(400).json({ success: false, message: 'Invalid id_users' });
+                return;
+            }
+
+            // Check if the room status is not already set to 1
+            if (roomsResults[0].status === 1) {
+                res.status(400).json({ success: false, message: 'Room is already booked' });
+                return;
+            }
+
+            // Calculate start_time and end_time based on current time and duration
+            const currentTime = new Date();
+            const startTime = currentTime;
+            const endTime = new Date(currentTime.getTime() + duration * 60 * 60 * 1000); // Adding provided duration in hours
+
+            // If both id_rooms and id_users are valid, insert the order
+            const insertOrderQuery = 'INSERT INTO orders (id_rooms, id_users, start_time, end_time, status, type) VALUES (?, ?, ?, ?, ? , ?)';
+            db.query(insertOrderQuery, [id_rooms, id_users, startTime, endTime, status, type], (insertErr, insertResults) => {
+                if (insertErr) {
+                    console.error('Error inserting order:', insertErr);
+                    res.status(500).json({ success: false, message: 'Error inserting order' });
+                } else {
+                    // Update status in rooms table to 1
+                    const updateStatusQuery = 'UPDATE rooms SET status = 1 WHERE id = ?';
+                    db.query(updateStatusQuery, [id_rooms], (updateStatusErr, updateStatusResults) => {
+                        if (updateStatusErr) {
+                            console.error('Error updating status in rooms:', updateStatusErr);
+                            res.status(500).json({ success: false, message: 'Error updating status in rooms' });
+                        } else {
+                            res.json({ success: true, message: 'Pesanan disimpan, status diperbarui' });
+                        }
+                    });
+                }
+            });
+        });
+    });
+});
+
+app.post('/orders-open-table', verifyToken, (req, res) => {
+    const { id_rooms } = req.body;
+    const type = "OPEN-TABLE";
+    const status = "START";
+    const id_users = req.user.id_user;
     // Check if id_rooms exists in the rooms table
     const checkRoomsQuery = 'SELECT * FROM rooms WHERE id = ?';
     db.query(checkRoomsQuery, [id_rooms], (roomsErr, roomsResults) => {
@@ -164,9 +237,13 @@ app.post('/orders', verifyToken, (req, res) => {
                 return;
             }
 
+            // Calculate start_time and end_time based on current time and duration
+            const currentTime = new Date();
+            const startTime = currentTime;
+
             // If both id_rooms and id_users are valid, insert the order
-            const insertOrderQuery = 'INSERT INTO orders (id_rooms, id_users, start_time, end_time, status) VALUES (?, ?, ?, ?, ?)';
-            db.query(insertOrderQuery, [id_rooms, id_users, start_time, end_time, status], (insertErr, insertResults) => {
+            const insertOrderQuery = 'INSERT INTO orders (id_rooms, id_users, start_time, status, type) VALUES (?, ?, ?, ?,  ?)';
+            db.query(insertOrderQuery, [id_rooms, id_users, startTime, status, type], (insertErr, insertResults) => {
                 if (insertErr) {
                     console.error('Error inserting order:', insertErr);
                     res.status(500).json({ success: false, message: 'Error inserting order' });
@@ -187,8 +264,55 @@ app.post('/orders', verifyToken, (req, res) => {
     });
 });
 
+
+app.post('/orders-stop-open-table', verifyToken, (req, res) => {
+    const { order_id } = req.body;
+
+    // Check if order exists
+    const checkOrderQuery = 'SELECT * FROM orders WHERE id = ?';
+    db.query(checkOrderQuery, [order_id], (orderErr, orderResults) => {
+        if (orderErr) {
+            console.error('Error checking order:', orderErr);
+            res.status(500).json({ success: false, message: 'Error checking order' });
+            return;
+        }
+
+        if (orderResults.length === 0) {
+            res.status(400).json({ success: false, message: 'Invalid order_id' });
+            return;
+        }
+
+        const currentTime = new Date();
+        const end_time = currentTime;
+
+        const roomId = orderResults[0].id_rooms;
+
+        // Update order status to 'STOP'
+        const updateOrderQuery = 'UPDATE orders SET status = ? ,end_time = ? WHERE id = ?';
+        db.query(updateOrderQuery, ['STOP', end_time, order_id], (updateOrderErr, updateOrderResults) => {
+            if (updateOrderErr) {
+                console.error('Error updating order status:', updateOrderErr);
+                res.status(500).json({ success: false, message: 'Error updating order status' });
+                return;
+            }
+
+            // Update room status to 0
+            const updateRoomStatusQuery = 'UPDATE rooms SET status = 0 WHERE id = ?';
+            db.query(updateRoomStatusQuery, [roomId], (updateRoomStatusErr, updateRoomStatusResults) => {
+                if (updateRoomStatusErr) {
+                    console.error('Error updating room status:', updateRoomStatusErr);
+                    res.status(500).json({ success: false, message: 'Error updating room status' });
+                    return;
+                }
+
+                res.json({ success: true, message: 'Order stopped, room status updated' });
+            });
+        });
+    });
+});
+
 // 4. POST Stop Order
-app.post('/stop-order', verifyToken, (req, res) => {
+app.post('/orders-stop-open-billing', verifyToken, (req, res) => {
     const { order_id } = req.body;
 
     // Check if order exists
@@ -240,6 +364,9 @@ app.get('/newest-orders', verifyToken, (req, res) => {
 	rooms.name,
 	rooms.status status_rooms,
 	orders.status status_order,
+	orders.type,
+    orders.id,
+    COALESCE ( MAX( orders.start_time ), 'No orders' ) AS newest_order_start_time,
 	COALESCE ( MAX( orders.end_time ), 'No orders' ) AS newest_order_end_time 
 FROM
 	rooms
