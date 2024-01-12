@@ -90,9 +90,9 @@ app.post('/configs', verifyToken, (req, res) => {
 
         if (checkResults.length > 0) {
             // The record exists, update it
-            const updateQuery = 'UPDATE configs SET ip = ? , secret = ? WHERE id = ?';
+            const updateQuery = 'UPDATE configs SET ip = ?  WHERE id = ?';
 
-            db.query(updateQuery, [ip, secret, configIdToUpdate], (updateErr, updateResults) => {
+            db.query(updateQuery, [ip, configIdToUpdate], (updateErr, updateResults) => {
                 if (updateErr) {
                     console.error('Error updating configuration:', updateErr);
                     res.status(500).json({ success: false, message: 'Error updating configuration' });
@@ -365,7 +365,7 @@ app.get('/newest-orders', verifyToken, (req, res) => {
 	rooms.status status_rooms,
 	orders.status status_order,
 	orders.type,
-    orders.id,
+    COALESCE ( MAX( orders.id ), 0 ) AS id, 
     COALESCE ( MAX( orders.start_time ), 'No orders' ) AS newest_order_start_time,
 	COALESCE ( MAX( orders.end_time ), 'No orders' ) AS newest_order_end_time 
 FROM
