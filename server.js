@@ -387,6 +387,89 @@ GROUP BY
 });
 
 
+
+app.get('/newest-bg-orders', (req, res) => {
+    const query = `
+    SELECT
+	rooms.id AS room_id,
+	rooms.code,
+	rooms.name,
+	rooms.status status_rooms,
+	orders.status status_order,
+	orders.type,
+    COALESCE ( MAX( orders.id ), 0 ) AS id, 
+    COALESCE ( MAX( orders.start_time ), 'No orders' ) AS newest_order_start_time,
+	COALESCE ( MAX( orders.end_time ), 'No orders' ) AS newest_order_end_time 
+FROM
+	rooms
+	LEFT JOIN orders ON rooms.id = orders.id_rooms 
+WHERE 
+orders.type = "OPEN-BILLING" and
+orders.status = "START"
+GROUP BY
+	rooms.id,
+	rooms.name
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error('Error querying newest orders:', err);
+            res.status(500).json({ success: false, message: 'Error querying newest orders' });
+        } else {
+            res.json({ success: true, newestOrders: results });
+        }
+    });
+});
+
+
+app.post('/orders-stop-open-bg-billing', (req, res) => {
+    const { order_id, key } = req.body;
+
+    if (key != "51383db2eb3e126e52695488e0650f68ea43b4c6") {
+        res.status(500).json({ success: false, message: 'Error Key Saslah' });
+        return;
+    }
+
+    // Check if order exists
+    const checkOrderQuery = 'SELECT * FROM orders WHERE id = ?';
+    db.query(checkOrderQuery, [order_id], (orderErr, orderResults) => {
+        if (orderErr) {
+            console.error('Error checking order:', orderErr);
+            res.status(500).json({ success: false, message: 'Error checking order' });
+            return;
+        }
+
+        if (orderResults.length === 0) {
+            res.status(400).json({ success: false, message: 'Invalid order_id' });
+            return;
+        }
+
+        const roomId = orderResults[0].id_rooms;
+
+        // Update order status to 'STOP'
+        const updateOrderQuery = 'UPDATE orders SET status = ? WHERE id = ?';
+        db.query(updateOrderQuery, ['STOP', order_id], (updateOrderErr, updateOrderResults) => {
+            if (updateOrderErr) {
+                console.error('Error updating order status:', updateOrderErr);
+                res.status(500).json({ success: false, message: 'Error updating order status' });
+                return;
+            }
+
+            // Update room status to 0
+            const updateRoomStatusQuery = 'UPDATE rooms SET status = 0 WHERE id = ?';
+            db.query(updateRoomStatusQuery, [roomId], (updateRoomStatusErr, updateRoomStatusResults) => {
+                if (updateRoomStatusErr) {
+                    console.error('Error updating room status:', updateRoomStatusErr);
+                    res.status(500).json({ success: false, message: 'Error updating room status' });
+                    return;
+                }
+
+                res.json({ success: true, message: 'Order stopped, room status updated' });
+            });
+        });
+    });
+});
+
 // Jalankan server
 app.listen(port, () => {
     console.log(`Server berjalan di http://localhost:${port}`);
