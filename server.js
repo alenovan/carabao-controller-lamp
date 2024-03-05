@@ -485,7 +485,14 @@ GROUP BY
 
 app.post('/history-orders', verifyToken, (req, res) => {
     const ordersName = req.body.search; // Assuming the parameter is sent in the request body
-    const query = `
+    const startDate = req.body.startDate; // Filter by start date
+    const endDate = req.body.endDate; // Filter by end date
+    const page = req.body.page || 1; // Default to page 1 if not provided
+    const pageSize = req.body.pageSize || 10; // Default page size to 10 if not provided
+    const startIndex = (page - 1) * pageSize; // Calculate the start index for pagination
+
+    // Construct the SQL query with date filters and pagination
+    let query = `
     SELECT
         rooms.name,
         orders.status status_order,
@@ -500,17 +507,31 @@ app.post('/history-orders', verifyToken, (req, res) => {
         JOIN orders ON rooms.id = orders.id_rooms
         JOIN users ON users.id = orders.id_users
     WHERE
-        orders.name LIKE ? and end_time is not null
-    ORDER BY
-        orders.end_time
-    `;
+        orders.name LIKE ? 
+        AND end_time IS NOT NULL`;
 
-    db.query(query, [`%${ordersName}%`], (err, results) => {
+    const queryParams = [`%${ordersName}%`]; // Parameters for the SQL query
+
+    // Add date filters if provided
+    if (startDate) {
+        query += ' AND DATE(orders.start_time) >= ?';
+        queryParams.push(startDate);
+    }
+    if (endDate) {
+        query += ' AND DATE(orders.start_time) <= ?';
+        queryParams.push(endDate);
+    }
+
+    // Add pagination
+    query += ' LIMIT ?, ?';
+    queryParams.push(startIndex, pageSize);
+
+    db.query(query, queryParams, (err, results) => {
         if (err) {
             console.error('Error querying history orders:', err);
             res.status(500).json({ success: false, message: 'Error querying orders' });
         } else {
-            res.json({ success: true, matchedOrders: results });
+            res.json({ success: true, total: results.length, matchedOrders: results });
         }
     });
 });
