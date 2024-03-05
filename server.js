@@ -63,7 +63,7 @@ app.post('/logins', (req, res) => {
 
 // 2. GET Data Meja
 app.get('/rooms', verifyToken, (req, res) => {
-    db.query('SELECT * FROM rooms', (err, results) => {
+    db.query('SELECT * FROM rooms join panels on panels.id = rooms.id_panels', (err, results) => {
         if (err) {
             console.error('Error querying rooms:', err);
             res.status(500).json({ success: false, message: 'Error querying rooms' });
@@ -132,7 +132,7 @@ app.get('/configs', verifyToken, (req, res) => {
 
 
 app.post('/orders-open-billing', verifyToken, (req, res) => {
-    const { id_rooms, duration } = req.body;
+    const { id_rooms, duration, name } = req.body;
     const type = "OPEN-BILLING";
     const status = "START";
     const id_users = req.user.id_user;
@@ -163,6 +163,10 @@ app.post('/orders-open-billing', verifyToken, (req, res) => {
                 res.status(400).json({ success: false, message: 'Invalid id_users' });
                 return;
             }
+            if (name.length === 0) {
+                res.status(400).json({ success: false, message: 'Pastikan nama terisi' });
+                return;
+            }
 
             // Check if the room status is not already set to 1
             if (roomsResults[0].status === 1) {
@@ -176,8 +180,8 @@ app.post('/orders-open-billing', verifyToken, (req, res) => {
             const endTime = new Date(currentTime.getTime() + duration * 60 * 60 * 1000); // Adding provided duration in hours
 
             // If both id_rooms and id_users are valid, insert the order
-            const insertOrderQuery = 'INSERT INTO orders (id_rooms, id_users, start_time, end_time, status, type) VALUES (?, ?, ?, ?, ? , ?)';
-            db.query(insertOrderQuery, [id_rooms, id_users, startTime, endTime, status, type], (insertErr, insertResults) => {
+            const insertOrderQuery = 'INSERT INTO orders (id_rooms, id_users, start_time, end_time, status, type,name) VALUES (?, ?, ?, ?, ? , ?,?)';
+            db.query(insertOrderQuery, [id_rooms, id_users, startTime, endTime, status, type, name], (insertErr, insertResults) => {
                 if (insertErr) {
                     console.error('Error inserting order:', insertErr);
                     res.status(500).json({ success: false, message: 'Error inserting order' });
@@ -199,7 +203,7 @@ app.post('/orders-open-billing', verifyToken, (req, res) => {
 });
 
 app.post('/orders-open-table', verifyToken, (req, res) => {
-    const { id_rooms } = req.body;
+    const { id_rooms, name } = req.body;
     const type = "OPEN-TABLE";
     const status = "START";
     const id_users = req.user.id_user;
@@ -231,6 +235,11 @@ app.post('/orders-open-table', verifyToken, (req, res) => {
                 return;
             }
 
+            if (name.length === 0) {
+                res.status(400).json({ success: false, message: 'Pastikan nama terisi' });
+                return;
+            }
+
             // Check if the room status is not already set to 1
             if (roomsResults[0].status === 1) {
                 res.status(400).json({ success: false, message: 'Room is already booked' });
@@ -242,8 +251,8 @@ app.post('/orders-open-table', verifyToken, (req, res) => {
             const startTime = currentTime;
 
             // If both id_rooms and id_users are valid, insert the order
-            const insertOrderQuery = 'INSERT INTO orders (id_rooms, id_users, start_time, status, type) VALUES (?, ?, ?, ?,  ?)';
-            db.query(insertOrderQuery, [id_rooms, id_users, startTime, status, type], (insertErr, insertResults) => {
+            const insertOrderQuery = 'INSERT INTO orders (id_rooms, id_users, start_time, status, type,name) VALUES (?, ?, ?, ?,  ?,?)';
+            db.query(insertOrderQuery, [id_rooms, id_users, startTime, status, type, name], (insertErr, insertResults) => {
                 if (insertErr) {
                     console.error('Error inserting order:', insertErr);
                     res.status(500).json({ success: false, message: 'Error inserting order' });
@@ -371,6 +380,7 @@ app.get('/newest-orders', verifyToken, (req, res) => {
 FROM
 	rooms
 	LEFT JOIN orders ON rooms.id = orders.id_rooms 
+    where rooms.rooms_available  = 1
 GROUP BY
 	rooms.id,
 	rooms.name
@@ -417,6 +427,41 @@ GROUP BY
             res.status(500).json({ success: false, message: 'Error querying newest orders' });
         } else {
             res.json({ success: true, newestOrders: results });
+        }
+    });
+});
+
+
+
+app.post('/history-orders', (req, res) => {
+    const ordersName = req.body.search; // Assuming the parameter is sent in the request body
+    const query = `
+    SELECT
+        rooms.id AS room_id,
+        rooms.code,
+        rooms.name,
+        rooms.status status_rooms,
+        orders.status status_order,
+        orders.type,
+        orders.name AS orders_name,
+        orders.id AS id, 
+        orders.start_time,
+        orders.end_time 
+    FROM
+        rooms
+        JOIN orders ON rooms.id = orders.id_rooms
+    WHERE
+        orders.name LIKE ?
+    ORDER BY
+        orders.end_time
+    `;
+
+    db.query(query, [`%${ordersName}%`], (err, results) => {
+        if (err) {
+            console.error('Error querying history orders:', err);
+            res.status(500).json({ success: false, message: 'Error querying orders' });
+        } else {
+            res.json({ success: true, matchedOrders: results });
         }
     });
 });
