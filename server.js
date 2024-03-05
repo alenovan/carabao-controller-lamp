@@ -117,6 +117,111 @@ app.get('/rooms', verifyToken, (req, res) => {
     });
 });
 
+// 3. GET Update maja
+app.put('/rooms/:id', verifyToken, (req, res) => {
+    const roomId = req.params.id;
+    const { name, panelsId, roomsActive } = req.body;
+
+    const updateFields = [];
+    const updateParams = [];
+
+    if (name !== null && name !== undefined) {
+        updateFields.push("name = ?");
+        updateParams.push(name);
+    }
+
+    if (panelsId) {
+        updateFields.push("id_panels = ?");
+        updateParams.push(panelsId);
+    }
+
+    if (roomsActive) {
+        updateFields.push("rooms_available = ?");
+        updateParams.push(roomsActive);
+    }
+
+    if (updateFields.length === 0) {
+        return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    updateParams.push(roomId);
+
+    const updateQuery = `UPDATE rooms SET ${updateFields.join(', ')} WHERE id = ?`;
+
+    db.query(updateQuery, updateParams, (err, results) => {
+        if (err) {
+            console.error('Error updating room:', err);
+            res.status(500).json({ success: false, message: 'Error updating room' });
+        } else {
+            res.json({ success: true, message: 'Room updated successfully' });
+        }
+    });
+});
+
+
+
+// 2. GET Data Panels
+app.get('/panels', verifyToken, (req, res) => {
+    db.query('SELECT * FROM panels', (err, results) => {
+        if (err) {
+            console.error('Error querying rooms:', err);
+            res.status(500).json({ success: false, message: 'Error querying rooms' });
+        } else {
+            res.json({ success: true, rooms: results });
+        }
+    });
+});
+
+
+// 3. GET Update Panels
+app.put('/panels/:id', verifyToken, (req, res) => {
+    const panelsId = req.params.id;
+    const { name, ip, secret, is_active } = req.body;
+
+    const updateFields = [];
+    const updateParams = [];
+
+    if (name !== null && name !== undefined) {
+        updateFields.push("position = ?");
+        updateParams.push(name);
+    }
+
+    if (ip) {
+        updateFields.push("ip = ?");
+        updateParams.push(ip);
+    }
+
+    if (secret) {
+        updateFields.push("secret = ?");
+        updateParams.push(secret);
+    }
+
+    if (is_active) {
+        updateFields.push("is_active = ?");
+        updateParams.push(is_active);
+    }
+
+    if (updateFields.length === 0) {
+        return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    updateParams.push(panelsId);
+
+    const updateQuery = `UPDATE panels SET ${updateFields.join(', ')} WHERE id = ?`;
+
+    db.query(updateQuery, updateParams, (err, results) => {
+        if (err) {
+            console.error('Error updating Panels:', err);
+            res.status(500).json({ success: false, message: 'Error updating Panels' });
+        } else {
+            res.json({ success: true, message: 'Panels updated successfully' });
+        }
+    });
+});
+
+
+
+
 // 3. POST Config with Key
 app.post('/configs', verifyToken, (req, res) => {
     const { ip, secret } = req.body;
