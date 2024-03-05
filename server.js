@@ -487,7 +487,6 @@ app.post('/history-orders', verifyToken, (req, res) => {
     const ordersName = req.body.search; // Assuming the parameter is sent in the request body
     const query = `
     SELECT
-        rooms.code,
         rooms.name,
         orders.status status_order,
         orders.type,
