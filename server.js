@@ -107,7 +107,7 @@ app.post('/logout', (req, res) => {
 
 // 2. GET Data Meja
 app.get('/rooms', verifyToken, (req, res) => {
-    db.query('SELECT * FROM rooms join panels on panels.id = rooms.id_panels', (err, results) => {
+    db.query('SELECT rooms.id,name,code,status,ip,secret FROM rooms join panels on panels.id = rooms.id_panels where rooms_available = 1 ', (err, results) => {
         if (err) {
             console.error('Error querying rooms:', err);
             res.status(500).json({ success: false, message: 'Error querying rooms' });
