@@ -6,10 +6,12 @@ const app = express();
 const port = 3000;
 const jwt = require('jsonwebtoken');
 const config = require('./config')
+
+const blacklistedTokens = [];
+
 // Middleware
 app.use(bodyParser.json());
 
-// Konfigurasi Database MySQL
 // Konfigurasi Database MySQL
 const db = mysql.createConnection(config);
 
@@ -24,18 +26,46 @@ db.connect(err => {
 
 // Middleware to verify JWT token
 function verifyToken(req, res, next) {
+    // Get token from request headers
     const authHeader = req.header('Authorization');
-    const token = authHeader && authHeader.split(' ')[1];
 
-    if (!token) return res.status(403).json({ success: false, message: 'Access denied' });
+    // Check if authHeader exists and has the correct format
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(403).json({ success: false, message: 'Token is required' });
+    }
 
-    jwt.verify(token, 'your-secret-key', (err, decoded) => {
-        if (err) return res.status(401).json({ success: false, message: 'Invalid token' });
+    // Extract token from authHeader
+    const token = authHeader.split(' ')[1];
 
+    // Check if token is blacklisted
+    if (blacklistedTokens.includes(authHeader)) {
+        return res.status(401).json({ success: false, message: 'Token is blacklisted' });
+    }
+
+    // Verify token
+    jwt.verify(token, 'caraba0', (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ success: false, message: 'Invalid token' });
+        }
         req.user = decoded;
-        next();
+        next(); // Call next middleware
     });
 }
+
+
+
+app.get('/me', verifyToken, (req, res) => {
+    const id_users = req.user.id_user;
+    db.query('SELECT id,username,is_timer FROM users where id =' + id_users, (err, results) => {
+        if (err) {
+            console.error('Error querying rooms:', err);
+            res.status(500).json({ success: false, message: 'Error querying rooms' });
+        } else {
+            res.json({ success: true, detail: results });
+        }
+    });
+});
+
 
 // 1. POST Login
 app.post('/logins', (req, res) => {
@@ -49,17 +79,31 @@ app.post('/logins', (req, res) => {
             res.status(500).json({ success: false, message: 'Error querying user' });
         } else if (results.length > 0) {
             const userId = results[0].id; // Assuming your user table has an 'id' field
+            const isTimer = results[0].is_timer; // Assuming your user table has an 'id' field
 
             // User authenticated, generate a JWT token with user ID in the payload
-            const token = jwt.sign({ id_user: userId, username: username }, 'your-secret-key'); // Replace 'your-secret-key' with a secure secret key
+            const token = jwt.sign({ id_user: userId, username: username }, 'caraba0'); // Replace 'your-secret-key' with a secure secret key
 
-            res.json({ success: true, message: 'Login berhasil', token: token });
+            res.json({ success: true, message: 'Login berhasil', token: token, timer: isTimer });
 
         } else {
             res.status(401).json({ success: false, message: 'Login gagal' });
         }
     });
 });
+
+
+app.post('/logout', (req, res) => {
+    // Invalidate the token on the server side by adding it to the blacklist
+    const token = req.headers['authorization'];
+    blacklistedTokens.push(token);
+
+    // Clear token on client side
+    res.clearCookie('token'); // Clear token cookie if using cookies
+    res.status(200).json({ success: true, message: 'Logout berhasil' });
+});
+
+
 
 // 2. GET Data Meja
 app.get('/rooms', verifyToken, (req, res) => {
@@ -401,7 +445,7 @@ GROUP BY
 
 
 
-app.get('/newest-bg-orders', (req, res) => {
+app.get('/newest-bg-orders', verifyToken, (req, res) => {
     const query = `
     SELECT
 	rooms.id AS room_id,
@@ -443,19 +487,19 @@ app.post('/history-orders', verifyToken, (req, res) => {
     const ordersName = req.body.search; // Assuming the parameter is sent in the request body
     const query = `
     SELECT
-        rooms.id AS room_id,
         rooms.code,
         rooms.name,
-        rooms.status status_rooms,
         orders.status status_order,
         orders.type,
         orders.name AS orders_name,
         orders.id AS id, 
         orders.start_time,
-        orders.end_time 
+        orders.end_time,
+        users.username cashier_name 
     FROM
         rooms
         JOIN orders ON rooms.id = orders.id_rooms
+        JOIN users ON users.id = orders.id_users
     WHERE
         orders.name LIKE ? and end_time is not null
     ORDER BY
