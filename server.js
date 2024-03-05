@@ -374,11 +374,14 @@ app.get('/newest-orders', verifyToken, (req, res) => {
 	rooms.status status_rooms,
 	orders.status status_order,
 	orders.type,
+    panels.ip,
+    panels.secret,
     COALESCE ( MAX( orders.id ), 0 ) AS id, 
     COALESCE ( MAX( orders.start_time ), 'No orders' ) AS newest_order_start_time,
 	COALESCE ( MAX( orders.end_time ), 'No orders' ) AS newest_order_end_time 
 FROM
 	rooms
+    join panels on panels.id = rooms.id_panels
 	LEFT JOIN orders ON rooms.id = orders.id_rooms 
     where rooms.rooms_available  = 1
 GROUP BY
@@ -407,11 +410,14 @@ app.get('/newest-bg-orders', (req, res) => {
 	rooms.status status_rooms,
 	orders.status status_order,
 	orders.type,
+    panels.ip,
+    panels.secret,
     COALESCE ( MAX( orders.id ), 0 ) AS id, 
     COALESCE ( MAX( orders.start_time ), 'No orders' ) AS newest_order_start_time,
 	COALESCE ( MAX( orders.end_time ), 'No orders' ) AS newest_order_end_time 
 FROM
 	rooms
+    join panels on panels.id = rooms.id_panels
 	LEFT JOIN orders ON rooms.id = orders.id_rooms 
 WHERE 
 orders.type = "OPEN-BILLING" and
@@ -433,7 +439,7 @@ GROUP BY
 
 
 
-app.post('/history-orders', (req, res) => {
+app.post('/history-orders', verifyToken, (req, res) => {
     const ordersName = req.body.search; // Assuming the parameter is sent in the request body
     const query = `
     SELECT
@@ -451,7 +457,7 @@ app.post('/history-orders', (req, res) => {
         rooms
         JOIN orders ON rooms.id = orders.id_rooms
     WHERE
-        orders.name LIKE ?
+        orders.name LIKE ? and end_time is not null
     ORDER BY
         orders.end_time
     `;
