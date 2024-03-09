@@ -7,8 +7,11 @@ const port = 3000;
 const jwt = require('jsonwebtoken');
 const config = require('./config')
 
-const blacklistedTokens = [];
+//import library CORS
+const cors = require('cors')
 
+const blacklistedTokens = [];
+app.use(cors())
 // Middleware
 app.use(bodyParser.json());
 
